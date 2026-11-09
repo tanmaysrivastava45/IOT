@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Smart IoT Irrigation System | Cloud Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      padding: 16px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    h1 {
+      color: #1b4332;
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: #4a5568;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+    .badges {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+    .badge.cloud {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+    .badge.online {
+      background: #d4edda;
+      color: #155724;
+    }
+    .badge.offline {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #ffffff;
+      padding: 22px 18px;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      text-align: center;
+      border: 1px solid #e2e8f0;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+    }
+    .card-title {
+      color: #718096;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .value {
+      font-size: 34px;
+      font-weight: 800;
+      color: #2d3748;
+    }
+    .status {
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .status.on { color: #2e7d32; }
+    .status.off { color: #c62828; }
+    .status.auto { color: #1565c0; }
+    .status.manual { color: #e65100; }
+    .controls {
+      background: #ffffff;
+      padding: 26px 20px;
+      border-radius: 14px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .controls h2 {
+      font-size: 20px;
+      color: #1b4332;
+      margin-bottom: 18px;
+    }
+    .control-row {
+      margin-bottom: 22px;
+    }
+    .control-row h4 {
+      font-size: 15px;
+      color: #4a5568;
+      margin-bottom: 10px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      color: white;
+      background: #2d6a4f;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    }
+    button:hover:not(:disabled) {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+    button.off { background: #d90429; }
+    button.secondary { background: #4a5568; }
+    button:disabled {
+      background: #cbd5e0;
+      cursor: not-allowed;
+      box-shadow: none;
+      opacity: 0.7;
+    }
+    #feedback {
+      margin-top: 14px;
+      min-height: 22px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #2b6cb0;
+    }
+    footer {
+      text-align: center;
+      color: #a0aec0;
+      font-size: 13px;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Smart IoT Irrigation System</h1>
+    <p class="subtitle">Cloud Telemetry & Control Center (Render / Web)</p>
+    <div class="badges">
+      <div class="badge cloud">☁️ Hosted on Cloud</div>
+      <div id="deviceBadge" class="badge offline">
+        <span class="dot"></span>
+        <span id="deviceText">Checking ESP32...</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Temperature</div>
+      <div class="value" id="temperature">-- °C</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Soil Moisture</div>
+      <div class="value" id="moisture">-- %</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Raw Moisture ADC</div>
+      <div class="value" id="raw">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pump Status</div>
+      <div class="status" id="pump">--</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Operating Mode</div>
+      <div class="status" id="mode">--</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <h2>Cloud Remote Controls</h2>
+
+    <div class="control-row">
+      <h4>System Operating Mode</h4>
+      <div class="btn-group">
+        <button onclick="changeMode('auto')">Automatic Mode</button>
+        <button class="secondary" onclick="changeMode('manual')">Manual Mode</button>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <h4>Manual Pump Switching</h4>
+      <div class="btn-group">
+        <button id="btnPumpOn" onclick="triggerPump(1)">Turn Pump ON</button>
+        <button id="btnPumpOff" class="off" onclick="triggerPump(0)">Turn Pump OFF</button>
+      </div>
+    </div>
+
+    <div id="feedback"></div>
+  </div>
+
+  <footer>
+    ESP32 IoT Irrigation Project &bull; College Capstone Prototype
+  </footer>
+</div>
+
+<script>
+  let isAuto = true;
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error("HTTP error");
+      const data = await res.json();
+
+      document.getElementById('temperature').innerText =
+        data.temperatureValid ? data.temperature + ' °C' : 'Error';
+
+      document.getElementById('moisture').innerText =
+        data.moistureValid ? data.moisture + ' %' : 'Error';
+
+      document.getElementById('raw').innerText = data.rawMoisture;
+
+      const pumpElem = document.getElementById('pump');
+      pumpElem.innerText = data.pump ? 'ON' : 'OFF';
+      pumpElem.className = 'status ' + (data.pump ? 'on' : 'off');
+
+      const modeElem = document.getElementById('mode');
+      modeElem.innerText = data.mode;
+      modeElem.className = 'status ' + (data.mode === 'AUTO' ? 'auto' : 'manual');
+
+      isAuto = (data.mode === 'AUTO');
+      document.getElementById('btnPumpOn').disabled = isAuto;
+      document.getElementById('btnPumpOff').disabled = isAuto;
+
+      const deviceBadge = document.getElementById('deviceBadge');
+      const deviceText = document.getElementById('deviceText');
+      if (data.isOnline) {
+        deviceBadge.className = 'badge online';
+        deviceText.innerText = 'ESP32 Online (' + data.secondsSinceLastSeen + 's ago)';
+      } else {
+        deviceBadge.className = 'badge offline';
+        deviceText.innerText = data.secondsSinceLastSeen 
+          ? 'ESP32 Offline (seen ' + data.secondsSinceLastSeen + 's ago)'
+          : 'ESP32 Waiting for First Signal';
+      }
+    } catch (err) {
+      document.getElementById('deviceBadge').className = 'badge offline';
+      document.getElementById('deviceText').innerText = 'Cloud Server Disconnected';
+    }
+  }
+
+  async function changeMode(mode) {
+    try {
+      const res = await fetch('/api/mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      });
+      const data = await res.json();
+      document.getElementById('feedback').innerText = 'Mode switched to: ' + data.mode;
+      fetchStatus();
+    } catch (err) {
+      document.getElementById('feedback').innerText = 'Error changing mode';
+    }
+  }
+
+  async function triggerPump(state) {
+    try {
+      const res = await fetch('/api/pump', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        document.getElementById('feedback').innerText = data.error || 'Pump control failed';
+        return;
+      }
+      document.getElementById('feedback').innerText = 'Pump command sent: ' + (data.pump ? 'ON' : 'OFF');
+      fetchStatus();
+    } catch (err) {
+      document.getElementById('feedback').innerText = 'Error controlling pump';
+    }
+  }
+
+  fetchStatus();
+  setInterval(fetchStatus, 2000);
+</script>
+
+</body>
+</html>
+
