@@ -9,14 +9,14 @@
 
 // ============== WIFI CREDENTIALS ==============
 // Replace with your 2.4 GHz hotspot/Wi-Fi details
-const char* ssid = "YOUR_WIFI_SSID";
+const char* ssid = "312_Jio";
 const char* password = "YOUR_WIFI_PASSWORD";
 
 // ============== CLOUD CONFIGURATION (RENDER / VERCEL) ==============
 // Once you deploy your backend on Render, paste your URL here:
 // Example: "https://smart-irrigation-cloud.onrender.com/api/telemetry"
 // Leave as "" to run purely in local mode.
-const char* cloudServerUrl = "";
+const char* cloudServerUrl = "https://iot-bmwg.onrender.com/api/telemetry";
 
 // ============== PIN CONFIGURATION ==============
 
