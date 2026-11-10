@@ -196,9 +196,6 @@ void readSensors() {
 
   Serial.print("Mode: ");
   Serial.println(automaticMode ? "AUTO" : "MANUAL");
-
-  // Sync with cloud server (if URL configured)
-  syncWithCloud();
 }
 
 // ============== CLOUD SYNCHRONIZATION ==============
@@ -244,6 +241,7 @@ void syncWithCloud() {
       updateLCD();
     }
     http.end();
+    client.stop(); // Immediately release TLS socket memory and prevent heap exhaustion
   }
 }
 
@@ -645,6 +643,7 @@ void setup() {
   delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false); // Disable Wi-Fi modem sleep to prevent random disconnects
   WiFi.begin(ssid, password);
 
   lcd.clear();
@@ -685,12 +684,11 @@ void setup() {
   }
   else {
 
-    Serial.println("\nWiFi Connection Failed! Starting Fallback Access Point...");
+    Serial.println("\nWiFi Connection Failed! Starting Fallback Dual Access Point...");
 
-    WiFi.disconnect(true);
-    delay(100);
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP("Irrigation-ESP32");
+    WiFi.begin(ssid, password); // Keep searching for hotspot in background
 
     IPAddress apIP = WiFi.softAPIP();
 
@@ -787,11 +785,29 @@ void loop() {
     }
   }
 
+  // Auto-reconnect watchdog: periodically checks and restores Wi-Fi if connection is lost
+  static unsigned long lastWifiCheck = 0;
+  if (millis() - lastWifiCheck >= 8000) {
+    lastWifiCheck = millis();
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println(">> Wi-Fi disconnected! Re-establishing connection...");
+      WiFi.disconnect();
+      WiFi.begin(ssid, password);
+    }
+  }
+
   if (millis() - previousSensorMillis >= sensorInterval) {
 
     previousSensorMillis = millis();
     readSensors();
 
+  }
+
+  // Cloud sync timer: Dispatches HTTPS telemetry every 5 seconds (prevents memory fragmentation)
+  static unsigned long previousCloudMillis = 0;
+  if (millis() - previousCloudMillis >= 5000) {
+    previousCloudMillis = millis();
+    syncWithCloud();
   }
 
 }
