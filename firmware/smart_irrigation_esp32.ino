@@ -8,14 +8,10 @@
 #include <DHT.h>
 
 // ============== WIFI CREDENTIALS ==============
-// Replace with your 2.4 GHz hotspot/Wi-Fi details
 const char* ssid = "312_Jio";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* password = "22222222";
 
-// ============== CLOUD CONFIGURATION (RENDER / VERCEL) ==============
-// Once you deploy your backend on Render, paste your URL here:
-// Example: "https://smart-irrigation-cloud.onrender.com/api/telemetry"
-// Leave as "" to run purely in local mode.
+// ============== CLOUD CONFIGURATION (RENDER) ==============
 const char* cloudServerUrl = "https://iot-bmwg.onrender.com/api/telemetry";
 
 // ============== PIN CONFIGURATION ==============
@@ -198,17 +194,17 @@ void readSensors() {
   Serial.println(automaticMode ? "AUTO" : "MANUAL");
 }
 
-// ============== CLOUD SYNCHRONIZATION ==============
+// ============== CLOUD SYNCHRONIZATION (RENDER) ==============
 
 void syncWithCloud() {
   if (WiFi.status() != WL_CONNECTED || strlen(cloudServerUrl) == 0) return;
 
   WiFiClientSecure client;
-  client.setInsecure(); // Bypass TLS certificate check for lightweight cloud connectivity
+  client.setInsecure(); // Bypass certificate check for lightweight IoT connection
 
   HTTPClient http;
   if (http.begin(client, cloudServerUrl)) {
-    http.setTimeout(3500); // 3.5s timeout prevents blocking main loop
+    http.setTimeout(3500); // 3.5s timeout prevents blocking loop
     http.addHeader("Content-Type", "application/json");
 
     String payload = "{";
@@ -224,29 +220,53 @@ void syncWithCloud() {
     int httpCode = http.POST(payload);
     if (httpCode == 200 || httpCode == 201) {
       String response = http.getString();
+      Serial.print(">> Cloud Response: ");
+      Serial.println(response);
+
+      bool stateChanged = false;
 
       if (response.indexOf("\"mode\":\"MANUAL\"") >= 0) {
-        automaticMode = false;
+        if (automaticMode != false) {
+          automaticMode = false;
+          stateChanged = true;
+        }
       } else if (response.indexOf("\"mode\":\"AUTO\"") >= 0) {
-        automaticMode = true;
+        if (automaticMode != true) {
+          automaticMode = true;
+          stateChanged = true;
+        }
       }
 
       if (!automaticMode) {
         if (response.indexOf("\"manualPump\":true") >= 0) {
-          manualPumpState = true;
+          if (manualPumpState != true) {
+            manualPumpState = true;
+            stateChanged = true;
+          }
         } else if (response.indexOf("\"manualPump\":false") >= 0) {
-          manualPumpState = false;
+          if (manualPumpState != false) {
+            manualPumpState = false;
+            stateChanged = true;
+          }
         }
       }
-      controlPump();
-      updateLCD();
+
+      if (stateChanged) {
+        controlPump();
+        updateLCD();
+        Serial.println(">> Applied cloud command: Mode=" + String(automaticMode ? "AUTO" : "MANUAL") +
+                       " | Pump=" + String(pumpState ? "ON" : "OFF"));
+      }
+    } else {
+      Serial.print(">> Cloud HTTP Code: ");
+      Serial.println(httpCode);
     }
     http.end();
-    client.stop(); // Immediately release TLS socket memory and prevent heap exhaustion
+    client.stop(); // Immediately release SSL memory buffer to prevent heap leaks
   }
 }
 
-// ============== WEB DASHBOARD ==============
+// ============== LOCAL WEB DASHBOARD ==============
 
 const char webpage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
@@ -640,12 +660,13 @@ void setup() {
   dht.begin();
   analogReadResolution(12);
 
+  // Clean, persistent Station mode without conflicting Access Point
   WiFi.disconnect(true);
   delay(100);
   WiFi.mode(WIFI_STA);
   WiFi.persistent(true);
   WiFi.setAutoReconnect(true);
-  WiFi.setSleep(false); // Disable Wi-Fi modem sleep to prevent random disconnects
+  WiFi.setSleep(false); // Disable modem sleep to prevent random disconnects
   WiFi.setTxPower(WIFI_POWER_17dBm); // Stable transmission power, prevents RF saturation near phone
   WiFi.begin(ssid, password);
 
@@ -657,7 +678,7 @@ void setup() {
 
   int attempts = 0;
 
-  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+  while (WiFi.status() != WL_CONNECTED && attempts < 35) {
     delay(500);
     Serial.print(".");
     attempts++;
@@ -687,7 +708,8 @@ void setup() {
   }
   else {
 
-    Serial.println("\nWiFi Connection Waiting... ESP32 will auto-connect in background.");
+    Serial.println("\nWiFi Waiting... Background auto-reconnect active.");
+
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("WiFi Waiting...");
@@ -713,6 +735,7 @@ void setup() {
     Serial.print("Open in Browser: http://");
     Serial.println(WiFi.localIP());
     Serial.println("Or via mDNS:    http://irrigation.local");
+    Serial.println("Cloud URL:      https://iot-bmwg.onrender.com");
     Serial.println("-------------------------------------");
   }
 
@@ -771,20 +794,23 @@ void loop() {
     }
   }
 
-  // Non-intrusive auto-reconnect watchdog (only triggers if connection is genuinely lost for > 15 seconds)
+  // Robust auto-reconnect watchdog (only triggers if connection is genuinely lost for > 8 seconds)
   static unsigned long disconnectedSince = 0;
   if (WiFi.status() != WL_CONNECTED) {
     if (disconnectedSince == 0) {
       disconnectedSince = millis();
-    } else if (millis() - disconnectedSince > 15000) {
+    } else if (millis() - disconnectedSince > 8000) {
       disconnectedSince = millis();
-      Serial.println(">> Wi-Fi lost for 15s. Reconnecting...");
-      WiFi.reconnect();
+      Serial.println(">> Wi-Fi connection lost. Cleanly reconnecting to hotspot...");
+      WiFi.disconnect();
+      delay(150);
+      WiFi.begin(ssid, password);
     }
   } else {
     disconnectedSince = 0;
   }
 
+  // Local sensor read timer (every 2.5s)
   if (millis() - previousSensorMillis >= sensorInterval) {
 
     previousSensorMillis = millis();
@@ -792,12 +818,12 @@ void loop() {
 
   }
 
-  // Cloud sync timer: Dispatches HTTPS telemetry every 5 seconds (prevents memory fragmentation)
+  // Cloud sync timer: Dispatches HTTPS telemetry to Render every 3.5 seconds
+  // Gives radio breathing room to prevent beacon loss and heap fragmentation
   static unsigned long previousCloudMillis = 0;
-  if (millis() - previousCloudMillis >= 5000) {
+  if (millis() - previousCloudMillis >= 3500) {
     previousCloudMillis = millis();
     syncWithCloud();
   }
 
 }
-

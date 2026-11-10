@@ -286,14 +286,16 @@
 
   async function changeMode(mode) {
     try {
+      document.getElementById('feedback').innerText = '⏳ Switching mode to ' + mode.toUpperCase() + '...';
       const res = await fetch('/api/mode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode })
       });
       const data = await res.json();
-      document.getElementById('feedback').innerText = 'Mode switched to: ' + data.mode;
+      document.getElementById('feedback').innerText = '✓ Mode set to: ' + data.mode + ' (Syncing with ESP32...)';
       fetchStatus();
+      for (let i = 1; i <= 3; i++) setTimeout(fetchStatus, i * 1000);
     } catch (err) {
       document.getElementById('feedback').innerText = 'Error changing mode';
     }
@@ -301,6 +303,8 @@
 
   async function triggerPump(state) {
     try {
+      const action = state ? 'ON' : 'OFF';
+      document.getElementById('feedback').innerText = '⏳ Sending command: Turn Pump ' + action + '...';
       const res = await fetch('/api/pump', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -311,8 +315,9 @@
         document.getElementById('feedback').innerText = data.error || 'Pump control failed';
         return;
       }
-      document.getElementById('feedback').innerText = 'Pump command sent: ' + (data.pump ? 'ON' : 'OFF');
+      document.getElementById('feedback').innerText = '✓ Command sent: Pump ' + (data.pump ? 'ON' : 'OFF') + ' (Actuating ESP32...)';
       fetchStatus();
+      for (let i = 1; i <= 4; i++) setTimeout(fetchStatus, i * 1000);
     } catch (err) {
       document.getElementById('feedback').innerText = 'Error controlling pump';
     }
