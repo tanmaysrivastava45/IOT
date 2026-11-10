@@ -208,6 +208,7 @@ void syncWithCloud() {
 
   HTTPClient http;
   if (http.begin(client, cloudServerUrl)) {
+    http.setTimeout(3500); // 3.5s timeout prevents blocking main loop
     http.addHeader("Content-Type", "application/json");
 
     String payload = "{";
@@ -642,8 +643,10 @@ void setup() {
   WiFi.disconnect(true);
   delay(100);
   WiFi.mode(WIFI_STA);
+  WiFi.persistent(true);
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(false); // Disable Wi-Fi modem sleep to prevent random disconnects
+  WiFi.setTxPower(WIFI_POWER_17dBm); // Stable transmission power, prevents RF saturation near phone
   WiFi.begin(ssid, password);
 
   lcd.clear();
@@ -684,27 +687,10 @@ void setup() {
   }
   else {
 
-    Serial.println("\nWiFi Connection Failed! Starting Fallback Dual Access Point...");
-
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP("Irrigation-ESP32");
-    WiFi.begin(ssid, password); // Keep searching for hotspot in background
-
-    IPAddress apIP = WiFi.softAPIP();
-
-    Serial.println("=========================================");
-    Serial.println("FALLBACK ACCESS POINT STARTED!");
-    Serial.println("1. Connect Phone/PC Wi-Fi to: Irrigation-ESP32");
-    Serial.print("2. Open in browser: http://");
-    Serial.println(apIP);
-    Serial.println("=========================================");
-
+    Serial.println("\nWiFi Connection Waiting... ESP32 will auto-connect in background.");
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("AP:Irrigation-AP");
-
-    lcd.setCursor(0, 1);
-    lcd.print(apIP.toString());
+    lcd.print("WiFi Waiting...");
 
   }
 
@@ -785,15 +771,18 @@ void loop() {
     }
   }
 
-  // Auto-reconnect watchdog: periodically checks and restores Wi-Fi if connection is lost
-  static unsigned long lastWifiCheck = 0;
-  if (millis() - lastWifiCheck >= 8000) {
-    lastWifiCheck = millis();
-    if (WiFi.status() != WL_CONNECTED) {
-      Serial.println(">> Wi-Fi disconnected! Re-establishing connection...");
-      WiFi.disconnect();
-      WiFi.begin(ssid, password);
+  // Non-intrusive auto-reconnect watchdog (only triggers if connection is genuinely lost for > 15 seconds)
+  static unsigned long disconnectedSince = 0;
+  if (WiFi.status() != WL_CONNECTED) {
+    if (disconnectedSince == 0) {
+      disconnectedSince = millis();
+    } else if (millis() - disconnectedSince > 15000) {
+      disconnectedSince = millis();
+      Serial.println(">> Wi-Fi lost for 15s. Reconnecting...");
+      WiFi.reconnect();
     }
+  } else {
+    disconnectedSince = 0;
   }
 
   if (millis() - previousSensorMillis >= sensorInterval) {
